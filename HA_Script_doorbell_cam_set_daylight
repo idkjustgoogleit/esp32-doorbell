@@ -1,0 +1,34 @@
+alias: Doorbell_cam_set_daylight
+sequence:
+  - service: esphome.esp32_s3_doorbell_camera_set_param
+    metadata: {}
+    data:
+      name: aec_mode
+      value: 1
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 3
+      milliseconds: 0
+  - service: esphome.esp32_s3_doorbell_camera_set_param
+    metadata: {}
+    data:
+      name: aec2
+      value: 1
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 3
+      milliseconds: 0
+  - service: esphome.esp32_s3_doorbell_camera_set_param
+    metadata: {}
+    data:
+      name: ae_level
+      value: 1
+  - service: input_text.set_value
+    metadata: {}
+    data:
+      value: daylight
+    target:
+      entity_id: input_text.doorbell_cam_scene
+mode: single
