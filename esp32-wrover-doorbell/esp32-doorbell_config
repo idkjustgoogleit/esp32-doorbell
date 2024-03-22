@@ -1,0 +1,153 @@
+esphome:
+  name: esp32-wrover-doorbell
+  friendly_name: esp32-doorbell
+
+external_components:
+    - source:
+          type: git
+          url: https://github.com/MichaKersloot/esphome_custom_components
+      components: [ esp32_camera ]
+
+esp32:
+  board: esp-wrover-kit
+  framework:
+    type: arduino
+
+# Enable logging, uncomment to enable
+logger:
+
+ota:
+
+# Enable Home Assistant API
+api:
+  #encryption:
+  #  key: "USE_YOUR_OWN_KEY_IF_NEEDED"
+  
+  services:
+    # change camera parameters on-the-fly
+    - service: camera_set_param
+      variables:
+        name: string
+        value: int
+      then:
+        - lambda: |-
+            bool state_return = false;
+            if (("contrast" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_contrast(value); state_return = true; }
+            if (("brightness" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_brightness(value); state_return = true; }
+            if (("saturation" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_saturation(value); state_return = true; }
+            if (("special_effect" == name) && (value >= 0U) && (value <= 6U)) { id(DoorCamera).set_special_effect((esphome::esp32_camera::ESP32SpecialEffect)value); state_return = true; }
+            if (("aec_mode" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_aec_mode((esphome::esp32_camera::ESP32GainControlMode)value); state_return = true; }
+            if (("aec2" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_aec2(value); state_return = true; }
+            if (("ae_level" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_ae_level(value); state_return = true; }
+            if (("aec_value" == name) && (value >= 0U) && (value <= 1200U)) { id(DoorCamera).set_aec_value(value); state_return = true; }
+            if (("agc_mode" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_agc_mode((esphome::esp32_camera::ESP32GainControlMode)value); state_return = true; }
+            if (("agc_value" == name) && (value >= 0U) && (value <= 30U)) { id(DoorCamera).set_agc_value(value); state_return = true; }
+            if (("agc_gain_ceiling" == name) && (value >= 0U) && (value <= 6U)) { id(DoorCamera).set_agc_gain_ceiling((esphome::esp32_camera::ESP32AgcGainCeiling)value); state_return = true; }
+            if (("wb_mode" == name) && (value >= 0U) && (value <= 4U)) { id(DoorCamera).set_wb_mode((esphome::esp32_camera::ESP32WhiteBalanceMode)value); state_return = true; }
+            if (("test_pattern" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_test_pattern(value); state_return = true; }
+            
+            if (true == state_return) {
+              id(DoorCamera).update_camera_parameters();
+            }
+            else {
+              ESP_LOGW("esp32_camera_set_param", "Error in name or data range");
+            }
+
+wifi:
+  ssid: "YOUR_WIFI_SSID"
+  password: "YOUR_WIFI_PASSWORD"
+  fast_connect: True
+  reboot_timeout: 60s
+
+i2c:
+  - id: bus_a
+    scl: 32
+    sda: 33
+    scan: True 
+
+esp32_camera:
+  id: DoorCamera
+  external_clock:
+    pin: GPIO21
+    frequency: 10MHz #default is 20mhz
+  i2c_pins:
+    sda: GPIO26
+    scl: GPIO27
+  data_pins: [GPIO4, GPIO5, GPIO18, GPIO19, GPIO36, GPIO39, GPIO34, GPIO35]
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  max_framerate: 1fps
+  idle_framerate: 0.05fps
+
+  # Image settings
+  name: DoorCamera
+  resolution: 640x480 #400x296 #640x480
+  jpeg_quality: 30
+  vertical_flip: false
+  horizontal_mirror: false #default true
+  wb_mode: auto
+  #agc_mode: auto
+
+
+# Camera web server
+#esp32_camera_web_server:
+#  - port: 80
+#    mode: stream
+  - port: 81
+    mode: snapshot
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 2min
+  - platform: uptime
+    name: Doorbell Uptime
+    update_interval: 110s
+
+  - platform: bme280_i2c
+    temperature:
+      name: "Temperature"
+      id: bme280_temp
+      oversampling: 8x
+    pressure:
+      name: "Pressure"
+      id: bme280_barometer
+      oversampling: 16x
+    humidity:
+      name: "Humidity"
+      id: bme280_humidity
+      oversampling: 8x
+    address: 0x76
+    update_interval: 60s
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      icon: "mdi:ip"
+      name: Doorbell IP
+    ssid:
+      name: Doorbell SSID
+      icon: "mdi:access-point-network"
+    bssid:
+      name: Doorbell BSSID
+      icon: "mdi:access-point-network"
+
+binary_sensor:
+  - platform: status
+    name: "Status"
+
+## METAL PUSH BUTTON ##
+  - platform: gpio
+    pin:
+      number: GPIO14
+      mode: INPUT_PULLUP
+    id: door_button
+    on_press:
+      then:
+        - homeassistant.service:
+            service: script.phone_notify
+
+button:
+  - platform: restart
+    name: "Restart"
