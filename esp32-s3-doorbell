@@ -1,0 +1,287 @@
+esphome:
+  name: esp32-s3-doorbell
+  friendly_name: esp32-s3-doorbell
+  on_boot:
+    priority: 800
+    then:
+      - dfplayer.set_volume: 20
+      - logger.log:
+          format: "DFPlayer volume set to 20 at startup"
+          level: INFO
+  platformio_options:
+    build_flags: "-DBOARD_HAS_PSRAM"
+    board_build.arduino.memory_type: qio_opi
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+  flash_size: 8MB
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/MichaKersloot/esphome_custom_components
+    components: [ esp32_camera ]
+
+uart:
+  id: my_uart
+  tx_pin: GPIO43
+  rx_pin: GPIO44
+  baud_rate: 9600
+
+select:
+#nice option to play with via homeassistant
+  - id: change_baud_rate
+    name: Baud rate
+    platform: template
+    options:
+      - "2400"
+      - "9600"
+      - "38400"
+      - "57600"
+      - "115200"
+      - "256000"
+      - "512000"
+      - "921600"
+    initial_option: "115200"
+    optimistic: true
+    restore_value: True
+    internal: false
+    entity_category: config
+    icon: mdi:swap-horizontal
+    set_action:
+      - lambda: |-
+          id(my_uart).flush();
+          uint32_t new_baud_rate = stoi(x);
+          ESP_LOGD("change_baud_rate", "Changing baud rate from %i to %i",id(my_uart).get_baud_rate(), new_baud_rate);
+          if (id(my_uart).get_baud_rate() != new_baud_rate) {
+            id(my_uart).set_baud_rate(new_baud_rate);
+            id(my_uart).load_settings();
+          }
+
+dfplayer:
+  id: dfplayerState
+  on_finished_playback:
+    then:
+      - logger.log: 
+          format: "Playback finished event"
+          level: INFO
+
+# Enable logging by uncommenting the following:
+logger:
+  level: INFO
+  baud_rate: 0 #uart log silencer
+
+
+ota:
+  #password: "USE_YOUR_OWN_OTA_PASSWORD_IF_U_WANT"
+
+# Enable Home Assistant API
+
+api:
+  #encryption:
+  #  key: "USE_YOUR_OWN_ENCRYPTION_KEY_IF_U_WANT"
+  
+  on_client_connected:
+    - logger.log: 
+        format: "API Connected, door button ON"
+        level: INFO
+    - light.turn_on:
+        id: doorbuttonled
+        effect: "None"
+
+  services:
+  # change camera parameters on-the-fly via homeassistant
+  - service: camera_set_param
+    variables:
+      name: string
+      value: int
+    then:
+      - lambda: |-
+          bool state_return = false;
+          if (("contrast" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_contrast(value); state_return = true; }
+          if (("brightness" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_brightness(value); state_return = true; }
+          if (("saturation" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_saturation(value); state_return = true; }
+          if (("special_effect" == name) && (value >= 0U) && (value <= 6U)) { id(DoorCamera).set_special_effect((esphome::esp32_camera::ESP32SpecialEffect)value); state_return = true; }
+          if (("aec_mode" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_aec_mode((esphome::esp32_camera::ESP32GainControlMode)value); state_return = true; }
+          if (("aec2" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_aec2(value); state_return = true; }
+          if (("ae_level" == name) && (value >= -2) && (value <= 2)) { id(DoorCamera).set_ae_level(value); state_return = true; }
+          if (("aec_value" == name) && (value >= 0U) && (value <= 1200U)) { id(DoorCamera).set_aec_value(value); state_return = true; }
+          if (("agc_mode" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_agc_mode((esphome::esp32_camera::ESP32GainControlMode)value); state_return = true; }
+          if (("agc_value" == name) && (value >= 0U) && (value <= 30U)) { id(DoorCamera).set_agc_value(value); state_return = true; }
+          if (("agc_gain_ceiling" == name) && (value >= 0U) && (value <= 6U)) { id(DoorCamera).set_agc_gain_ceiling((esphome::esp32_camera::ESP32AgcGainCeiling)value); state_return = true; }
+          if (("wb_mode" == name) && (value >= 0U) && (value <= 4U)) { id(DoorCamera).set_wb_mode((esphome::esp32_camera::ESP32WhiteBalanceMode)value); state_return = true; }
+          if (("test_pattern" == name) && (value >= 0U) && (value <= 1U)) { id(DoorCamera).set_test_pattern(value); state_return = true; }
+          
+          if (true == state_return) {
+            id(DoorCamera).update_camera_parameters();
+          }
+          else {
+            ESP_LOGW("esp32_camera_set_param", "Error in name or data range");
+          }
+  - service: dfplayer_play
+    variables:
+      file: int
+    then:
+      - dfplayer.play: !lambda 'return file;'
+      
+  - service: dfplayer_set_volume
+    variables:
+      volume: int
+    then:
+      - dfplayer.set_volume: !lambda 'return volume;'
+
+  - service: dfplayer_reset
+    then:
+      - dfplayer.reset
+
+wifi:
+ networks:
+  - ssid: "WIFI_NAME_1_HERE"
+    password: "WIFI_PASS_1"
+  #- ssid: "WIFI_NAME_2_HERE"
+  #  password: "WIFI_PASS_2"
+
+
+esp32_camera:
+  id: DoorCamera
+  external_clock:
+    pin: GPIO15
+    frequency: 10MHz
+  i2c_pins:
+    sda: GPIO4
+    scl: GPIO5
+  data_pins: [GPIO11, GPIO9, GPIO8, GPIO10, GPIO12, GPIO18, GPIO17, GPIO16]
+  vsync_pin: GPIO6
+  href_pin: GPIO7
+  pixel_clock_pin: GPIO13
+  max_framerate: 5fps
+  idle_framerate: 0.05fps
+
+  # Image settings
+  name: "Doorbell"
+  resolution: 1024x768 #800x600 #640x480 #400x296 #640x480
+  #jpeg_quality: 30
+  vertical_flip: false
+  horizontal_mirror: false #default true
+  wb_mode: auto
+
+  #change below if u want to play with settings
+  #agc_mode: manual
+  #agc_value: 10
+  #aec2: false
+  #aec_mode: manual
+  #aec_value: 250
+
+# Camera web server
+esp32_camera_web_server:
+  - port: 80
+    mode: stream
+  - port: 81
+    mode: snapshot
+
+button:
+  - platform: restart
+    name: "Restart"
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 30s
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 110s
+
+binary_sensor:
+  - platform: status
+    name: "Status"
+    id: connection_status
+    on_state:
+      if:
+        condition:
+          api.connected
+        then:
+          - logger.log: 
+              format: "API Connected during startup, door button ON!"
+              level: INFO
+          - light.turn_on:
+              id: doorbuttonled
+              effect: "None"
+
+## METAL PUSH BUTTON ##
+  - platform: gpio
+    pin:
+      number: GPIO14
+      mode: INPUT_PULLUP
+    id: door_button
+    on_press:
+      - then:
+        - homeassistant.service:
+            service: script.phone_notify        
+        - logger.log:
+            format: "Doorbell button pressed!"
+            level: INFO
+        - dfplayer.play_mp3: 
+            file: 1
+        - light.turn_on: 
+           id: doorbuttonled
+           effect: "Strobe"
+        - delay: 2s
+        - light.turn_on: 
+           id: doorbuttonled
+           effect: "None"
+        - delay: 2s
+        - dfplayer.reset          
+
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      icon: "mdi:ip"
+      name: "IP Address"
+    ssid:
+      name: SSID
+      icon: "mdi:access-point-network"
+
+
+output:
+  - id: light_output
+    platform: gpio
+    pin: GPIO21
+
+light:
+  - platform: binary
+    name: "DoorButtonLED"
+    output: light_output
+    id: doorbuttonled
+    effects:
+      - strobe:
+          name: Strobe
+          colors:
+            - state: true
+              brightness: 10%
+              duration: 50ms
+            - state: false
+              duration: 50ms
+            - state: true
+              brightness: 10%
+              duration: 50ms
+            - state: false
+              duration: 50ms
+            - state: true
+              brightness: 10%
+              duration: 50ms
+            - state: false
+              duration: 50ms
+            - state: true
+              brightness: 10%
+              duration: 50ms
+            - state: false
+              duration: 50ms
+            - state: true
+              brightness: 10%
+              duration: 50ms
+            - state: false
+              duration: 50ms
+              
