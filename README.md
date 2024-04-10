@@ -1,4 +1,7 @@
 <h1>ESP32 S3 Doorbell via ESPHome & HA</h1>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/idkjustgoogleit/esp32-doorbell/main/esp32-s3-doorbell/images/front-assembled.jpg" width="350" title="hover text">
+</p>
 <p>Couldn't find a generic DIY Doorbell with a nice angle, modular and easy to print; so made myself (another) one.&nbsp;</p>
 <p>This is an updated version which I made before but didn't have IR Night-vision, and was not so stable for 24/7 video streaming because of an overheating camera module (should have used a heatsink on that one too):</p>
 <p>
