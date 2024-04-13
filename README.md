@@ -10,6 +10,12 @@
 <p>Like the other design, this is also not waterproof so I put a rubber band in between, because why not. There is a smoll roof included in the design just to be safe I guess.</p>
 <p>Print with PETG because I don't know how direct sunlight would affect PLA.</p>
 <p>
+  <strong>Wiring:</strong>
+</p>
+<p align="center">
+  <img src="https://github.com/idkjustgoogleit/esp32-doorbell/blob/main/esp32-s3-doorbell/images/esp32-s3-doorbell.jpg" width="350" title="hover text">
+</p>
+<p>
   <strong>Parts &amp; Requirements list:</strong>
 </p>
 <ul>
